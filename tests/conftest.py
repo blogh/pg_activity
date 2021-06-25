@@ -21,9 +21,14 @@ def execute(postgresql):
 
     loop = asyncio.new_event_loop()
 
-    def execute(query: str, commit: bool = False, autocommit: bool = False) -> None:
+    def execute(
+        query: str, commit: bool = False, autocommit: bool = False, dbname: str = None
+    ) -> None:
         def _execute() -> None:
-            conn = psycopg2.connect(**postgresql.info.dsn_parameters)
+            connection_parms = postgresql.info.dsn_parameters
+            if dbname:
+                connection_parms["dbname"] = dbname
+            conn = psycopg2.connect(**connection_parms)
             conn.autocommit = autocommit
             cnx.append(conn)
             with conn.cursor() as c:

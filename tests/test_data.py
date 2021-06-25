@@ -89,6 +89,31 @@ def test_terminate_backend(postgresql, data, execute):
 
 def test_pg_get_active_connections(data, execute):
     assert data.pg_get_active_connections() == 1
-    execute("select pg_sleep(1)")
+    execute("select pg_sleep(2)")
     time.sleep(1)
     assert data.pg_get_active_connections() == 2
+
+
+def test_encoding(postgresql, data, execute):
+    """Test for issue #149"""
+    postgresql.set_session(autocommit=True)
+    with postgresql.cursor() as cur:
+        cur.execute(
+            "CREATE DATABASE latin1 ENCODING 'latin1' TEMPLATE template0 LC_COLLATE 'fr_FR.88591' LC_CTYPE 'fr_FR.88591'"
+        )
+    postgresql.set_session(autocommit=False)
+    execute("CREATE TABLE tbl(s text)", dbname="latin1", commit=True)
+    execute(
+        "INSERT INTO tbl(s) VALUES ('initilialized éléphant')",
+        dbname="latin1",
+        commit=True,
+    )
+    execute("UPDATE tbl SET s = 'blocking éléphant'", dbname="latin1")
+    execute("UPDATE tbl SET s = 'waiting éléphant'", dbname="latin1", commit=True)
+    time.sleep(2)
+    running = data.pg_get_activities()
+    assert "éléphant" in running[0].query
+    (waiting,) = data.pg_get_waiting()
+    assert "éléphant" in waiting.query
+    (blocking,) = data.pg_get_blocking()
+    assert "éléphant" in blocking.query
