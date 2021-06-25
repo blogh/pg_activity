@@ -5,6 +5,20 @@ import pytest
 from pgactivity.data import Data
 
 
+def wait_for_data(fct, timeout: int = 2):
+    count = int(timeout / 0.1)
+    for _ in range(count):
+        time.sleep(0.1)
+        data = fct()
+
+        if not data:
+            continue
+        break
+    else:
+        raise AssertionError("timeout")
+    return data
+
+
 @pytest.fixture
 def data(postgresql):
     return Data.pg_connect(
@@ -56,15 +70,7 @@ def test_blocking_waiting(postgresql, data, execute):
     execute("INSERT INTO t VALUES ('init')", commit=True)
     execute("UPDATE t SET s = 'blocking'")
     execute("UPDATE t SET s = 'waiting'", commit=True)
-    for _ in range(10):
-        time.sleep(0.1)
-        try:
-            (blocking,) = data.pg_get_blocking()
-        except ValueError:
-            continue
-        break
-    else:
-        raise AssertionError("timeout")
+    (blocking,) = wait_for_data(data.pg_get_blocking)
     (waiting,) = data.pg_get_waiting()
     assert "blocking" in blocking.query
     assert "waiting" in waiting.query
@@ -90,8 +96,8 @@ def test_terminate_backend(postgresql, data, execute):
 def test_pg_get_active_connections(data, execute):
     assert data.pg_get_active_connections() == 1
     execute("select pg_sleep(2)")
-    time.sleep(1)
-    assert data.pg_get_active_connections() == 2
+    nbconn = wait_for_data(data.pg_get_active_connections)
+    assert nbconn == 2
 
 
 def test_encoding(postgresql, data, execute):
@@ -110,8 +116,7 @@ def test_encoding(postgresql, data, execute):
     )
     execute("UPDATE tbl SET s = 'blocking éléphant'", dbname="latin1")
     execute("UPDATE tbl SET s = 'waiting éléphant'", dbname="latin1", commit=True)
-    time.sleep(2)
-    running = data.pg_get_activities()
+    running = wait_for_data(data.pg_get_activities)
     assert "éléphant" in running[0].query
     (waiting,) = data.pg_get_waiting()
     assert "éléphant" in waiting.query
