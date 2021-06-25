@@ -1,6 +1,7 @@
 import time
 
 import pytest
+from psycopg2.errors import WrongObjectType
 
 from pgactivity.data import Data
 
@@ -104,9 +105,16 @@ def test_encoding(postgresql, data, execute):
     """Test for issue #149"""
     postgresql.set_session(autocommit=True)
     with postgresql.cursor() as cur:
-        cur.execute(
-            "CREATE DATABASE latin1 ENCODING 'latin1' TEMPLATE template0 LC_COLLATE 'fr_FR.88591' LC_CTYPE 'fr_FR.88591'"
-        )
+        """plateform specific locales"""
+        try:
+            cur.execute(
+                "CREATE DATABASE latin1 ENCODING 'latin1' TEMPLATE template0 LC_COLLATE 'fr_FR.latin1' LC_CTYPE 'fr_FR.latin1'"
+            )
+        except WrongObjectType:
+            cur.execute(
+                "CREATE DATABASE latin1 ENCODING 'latin1' TEMPLATE template0 LC_COLLATE 'fr_FR.88591' LC_CTYPE 'fr_FR.88591'"
+            )
+
     postgresql.set_session(autocommit=False)
     execute("CREATE TABLE tbl(s text)", dbname="latin1", commit=True)
     execute(
